@@ -1,311 +1,304 @@
-//constantele motoarelor:
+// Motor constants.
 int MOTOR1_PIN1 = 3;
 int MOTOR1_PIN2 = 5;
 int MOTOR2_PIN1 = 6;
 int MOTOR2_PIN2 = 9;
 
+// A move for our tiny robot.
 struct movement {
-  int mode;
-  int ticks;
-  int priority;
+	int mode; // Movement mode.
+	int ticks; // Duration in ticks.
+	int priority; // Priority (lower value = higher priority).
 };
 
-void setup()
-{
-  //setam slot-urile motoarelor pe OUTPUT
-  pinMode(MOTOR1_PIN1, OUTPUT); //
-  pinMode(MOTOR1_PIN2, OUTPUT);
-  pinMode(MOTOR2_PIN1, OUTPUT);
-  pinMode(MOTOR2_PIN2, OUTPUT);
-
-  // setam toate slot-urile cu senzori pe INPUT pt a primi informatie
-  Serial.begin(9600);
-  randomSeed(analogRead(0));
-}
-
+const int
+	// Movement modes
+	MOVE_MODE_FORWARD = 0,
+	MOVE_MODE_LEFT = 1,
+	MOVE_MODE_RIGHT = 2,
+	MOVE_MODE_BACKWARD = 3,
+	MOVE_MODE_STOP = 4,
+	MOVE_MODE_SEEK_AND_DESTROY = 5,	// Rotate until you find an object, then move toward it.
+	
+	// Constants that can be tweaked.
+	COLOR_THRESHOLD_FRONT = 600, // Maximum value for white on front sensors.
+	COLOR_THRESHOLD_BACK = 750, // Maximum value for white on back sensors.
+	DIST_THRESHOLD = 300, // Minimum distance for detecting an object.
+	NORMAL_SPEED = 255, // Movement speed.
+	ROTATE_TICKS = 200, // How many ticks in a rotation.
+	DISTANCE_M = 1; // Distance multiplier.
+	
+// The queue of moves.
 movement m[10];
-
+	
 int
-  moves = 0,
-  colorThresholdFata = 600,
-  colorThresholdSpate = 750,
-  distThreshold = 300,
-  ignoreWhiteTicks = 0,
-  defaultModeTicks = 0,
-  NORMAL_SPEED = 255,
-  ticksUntilWeCanFindAgain = 0;
-
-const int
-  MOVE_MODE_FATA = 0,
-  MOVE_MODE_STANGA = 1,
-  MOVE_MODE_DREAPTA = 2,
-  MOVE_MODE_SPATE = 3,
-  MOVE_MODE_STOP = 4,
-  MOVE_MODE_SPATE_STANGA = 5,
-  MOVE_MODE_SPATE_DREAPTA = 6,
-  MOVE_MODE_FIND = 7;
-   
+	moves = 0, // Number of moves.
+	ticksNoMoves = 0, // How many ticks have elapsed since we haven't made any move.
+	ticksSeekAndDestroyCooldown = 0; // How many ticks are left until we can go into seek and destroy mode.
+	
+// Instead of directly using the value from the distance sensor, we'll use the mean of the previous 10 values, in order to eliminate noise.
 const int DIST_NR = 10;
-int lastDist[DIST_NR], lastDistCount = 0;
+int
+	lastDist[DIST_NR], // Previous values.
+	lastDistCount = 0; // Number of previous values.
 
-const int
-  ROTATE_TICKS = 200,
-  DISTANCE_M = 1;
-
+// Get the current movement priority.
 int getCurPriority() {
-  if (moves == 0) {
-    return 9999;
-  }
-  return m[0].priority;
+	if (moves == 0) {
+		return 9999;
+	}
+	return m[0].priority;
 }
 
+void setup() {
+	pinMode(MOTOR1_PIN1, OUTPUT);
+	pinMode(MOTOR1_PIN2, OUTPUT);
+	pinMode(MOTOR2_PIN1, OUTPUT);
+	pinMode(MOTOR2_PIN2, OUTPUT);
+
+	Serial.begin(9600);
+	
+	// Use the value from the first sensor as a seed.
+	randomSeed(analogRead(0));
+}
+
+// Add a new move. If there already are moves with lower priorities, delete them.
 void addMove(int mode, int ticks, int priority) {
-  // Mutari cu prioritate mai mica? Screw them.
-  while (
-  moves > 0 &&
-    m[moves - 1].priority > priority
-    ) {
-    moves--;
-  }
+	while (
+		moves > 0 &&
+		m[moves - 1].priority > priority
+	) {
+		moves--;
+	}
 
-  // Adauga miscare
-  m[moves].mode = mode;
-  m[moves].ticks = ticks;
-  m[moves].priority = priority;
-  moves++;
+	m[moves].mode = mode;
+	m[moves].ticks = ticks;
+	m[moves].priority = priority;
+	moves++;
 }
 
-void loop()
-{
-  int S_FS = analogRead(0); // fata stanga // culoare stanga
-  int S_FD = analogRead(1); // fata dreapta // culoare dreapta
-  int S_SS = analogRead(3); // spate stanga // lat dr
-  int S_SD = analogRead(2); // spate dreapta // lat stg
-  int curDist = analogRead(4); // distanta
-  
-  // Shift mean values.
-  int dist = 0;
-  for (int i = DIST_NR - 1; i > 0; i--) {
-    lastDist[i] = lastDist[i - 1];
-    dist += lastDist[i];
-  }
-  lastDist[0] = curDist;
-  dist += lastDist[0];
-  dist /= DIST_NR;
-  
-  // We didn't yet get DIST_NR distances? 
-  if (lastDistCount < DIST_NR) {
-    lastDistCount++;
-    dist = curDist;
-  }
-  
-  bool isFound = dist > distThreshold;
-  
-  /*
-  if (dist > distThreshold) {
-    Serial.println("Vad!");
-  }
-  else {    
-    Serial.println("Nu vad nimic.");
-  } 
-  return;*/  
-  
-  if (ticksUntilWeCanFindAgain > 0) {
-    ticksUntilWeCanFindAgain--;
-  }
+void loop() {
+	int
+		S_FL = analogRead(0), // Color senzor; Front left.
+		S_FR = analogRead(1), // Front right.
+		S_BL = analogRead(3), // Back left.
+		S_BR = analogRead(2), // Back right.
+		S_DIST = analogRead(4); // Distance sensor.
+	
+	// Delete the last value and add the current one.
+	int dist = 0;
+	for (int i = DIST_NR - 1; i > 0; i--) {
+		lastDist[i] = lastDist[i - 1];
+		dist += lastDist[i];
+	}
+	lastDist[0] = S_DIST;
+	dist += lastDist[0];
+	dist /= DIST_NR; // The computed distance (mean of previous 10 values).
+	
+	// If there aren't 10 values yet, just use the current one directly from the sensor.
+	if (lastDistCount < DIST_NR) {
+		lastDistCount++;
+		dist = S_DIST;
+	}
+	
+	// Is there an object in front of us?
+	bool objectDetected = dist > DIST_THRESHOLD;
+		
+	// Lower the cooldown.
+	if (ticksSeekAndDestroyCooldown > 0) {
+		ticksSeekAndDestroyCooldown--;
+	}
 
-  if (getCurPriority() > 2) {
-    if (
-    S_SS < colorThresholdSpate &&
-      S_SD < colorThresholdSpate
-      ) {
-      addMove(MOVE_MODE_FATA    , ROTATE_TICKS * 4 * DISTANCE_M, 2);
-      addMove(MOVE_MODE_DREAPTA , ROTATE_TICKS * 2, 2);
-      Serial.println("Spate doua;");
-    }   
-    else if (
-    S_FS < colorThresholdFata &&
-      S_FD < colorThresholdFata
-      ) {
-      addMove(MOVE_MODE_SPATE , ROTATE_TICKS * 4 * DISTANCE_M,  2);
-      addMove(MOVE_MODE_STANGA , ROTATE_TICKS * 2, 2);
-      Serial.println("Fata doua;");    
-    }
-    else if (
-    S_FS < colorThresholdFata &&
-      S_SS < colorThresholdSpate
-      ) {
-      addMove(MOVE_MODE_DREAPTA , ROTATE_TICKS    , 2);
-      addMove(MOVE_MODE_FATA    , ROTATE_TICKS * 4 * DISTANCE_M, 2);
-      Serial.println("Stanga doua;"); 
-    }
-    else if (
-    S_FD < colorThresholdFata &&
-      S_SD < colorThresholdSpate
-      ) {
-      addMove(MOVE_MODE_STANGA  , ROTATE_TICKS    , 2);
-      addMove(MOVE_MODE_FATA    , ROTATE_TICKS * 4 * DISTANCE_M, 2);
-      Serial.println("Dreapta doua;"); 
-    }
-  }
+	// Moves for two sensors.
+	if (getCurPriority() > 2) {
+		if (
+			S_BL < COLOR_THRESHOLD_BACK &&
+			S_BR < COLOR_THRESHOLD_BACK
+		) {
+			addMove(MOVE_MODE_FORWARD, ROTATE_TICKS * 4 * DISTANCE_M, 2);
+			addMove(MOVE_MODE_RIGHT, ROTATE_TICKS * 2, 2);
+			Serial.println("Spate doua;");
+		}	 
+		else if (
+			S_FL < COLOR_THRESHOLD_FRONT &&
+			S_FR < COLOR_THRESHOLD_FRONT
+		) {
+			addMove(MOVE_MODE_BACKWARD, ROTATE_TICKS * 4 * DISTANCE_M, 2);
+			addMove(MOVE_MODE_LEFT, ROTATE_TICKS * 2, 2);
+			Serial.println("Fata doua;");		
+		}
+		else if (
+			S_FL < COLOR_THRESHOLD_FRONT &&
+			S_BL < COLOR_THRESHOLD_BACK
+		) {
+			addMove(MOVE_MODE_RIGHT, ROTATE_TICKS, 2);
+			addMove(MOVE_MODE_FORWARD, ROTATE_TICKS * 4 * DISTANCE_M, 2);
+			Serial.println("Stanga doua;"); 
+		}
+		else if (
+			S_FR < COLOR_THRESHOLD_FRONT &&
+			S_BR < COLOR_THRESHOLD_BACK
+		) {
+			addMove(MOVE_MODE_LEFT, ROTATE_TICKS, 2);
+			addMove(MOVE_MODE_FORWARD, ROTATE_TICKS * 4 * DISTANCE_M, 2);
+			Serial.println("Dreapta doua;"); 
+		}
+	}
 
-  if (getCurPriority() > 5) {
-    if (S_FS < colorThresholdFata) { // E alb
-      if (dist > distThreshold) { // Are ceva in fata
-        addMove(MOVE_MODE_STANGA  , ROTATE_TICKS    , 5);
-        addMove(MOVE_MODE_SPATE   , ROTATE_TICKS * 2 * DISTANCE_M, 5);
-        Serial.println("Fata stanga; il vad in fata;");  
-      }
-      else {
-        addMove(MOVE_MODE_SPATE  , ROTATE_TICKS * 2 * DISTANCE_M   , 5);
-        addMove(MOVE_MODE_DREAPTA, ROTATE_TICKS       , 5);
-        Serial.println("Fata stanga;");
-      }
-    }
-    else if (S_FD < colorThresholdFata) { // E alb
-      if (dist > distThreshold) { // Are ceva in fata
-        addMove(MOVE_MODE_DREAPTA  , ROTATE_TICKS     , 5);
-        addMove(MOVE_MODE_SPATE,     ROTATE_TICKS * 2 * DISTANCE_M , 5);
-        Serial.println("Fata dreapta; il vad in fata;");
-      }
-      else {
-        addMove(MOVE_MODE_SPATE  , ROTATE_TICKS * 2   , 5);
-        addMove(MOVE_MODE_STANGA , ROTATE_TICKS       , 5);
-        Serial.println("Fata dreapta;");
-      }
-    }
-    else if (S_SS < colorThresholdSpate) { // E alb
-      if (dist > distThreshold) { // Are ceva in fata
-        addMove(MOVE_MODE_STANGA  , ROTATE_TICKS    , 5);
-        addMove(MOVE_MODE_FATA ,    ROTATE_TICKS * 2 * DISTANCE_M, 5);
-        Serial.println("Spate stanga; il vad in fata;");
-      }
-      else {
-        addMove(MOVE_MODE_DREAPTA  , ROTATE_TICKS    , 5);
-        addMove(MOVE_MODE_FATA     , ROTATE_TICKS * 2 * DISTANCE_M, 5);
-        Serial.println("Spate stanga;");
-      }
-    }
-    else if (S_SD < colorThresholdSpate) { // E alb
-      if (dist > distThreshold) { // Are ceva in fata
-        addMove(MOVE_MODE_DREAPTA  , ROTATE_TICKS    , 5);
-        addMove(MOVE_MODE_FATA     , ROTATE_TICKS * 2 * DISTANCE_M, 5);
-        Serial.println("Spate dreapta; il vad in fata;");
-      }
-      else {
-        addMove(MOVE_MODE_STANGA  , ROTATE_TICKS    , 5);
-        addMove(MOVE_MODE_FATA ,    ROTATE_TICKS * 2 * DISTANCE_M, 5);
-        Serial.println("Spate dreapta;");
-      }
-    }
-  }
+	// Moves for a single sensor.
+	if (getCurPriority() > 5) {
+		if (S_FL < COLOR_THRESHOLD_FRONT) {
+			if (dist > DIST_THRESHOLD) {
+				addMove(MOVE_MODE_LEFT, ROTATE_TICKS, 5);
+				addMove(MOVE_MODE_BACKWARD, ROTATE_TICKS * 2 * DISTANCE_M, 5);
+				Serial.println("Fata stanga; il vad in fata;");	
+			}
+			else {
+				addMove(MOVE_MODE_BACKWARD, ROTATE_TICKS * 2 * DISTANCE_M, 5);
+				addMove(MOVE_MODE_RIGHT, ROTATE_TICKS, 5);
+				Serial.println("Fata stanga;");
+			}
+		}
+		else if (S_FR < COLOR_THRESHOLD_FRONT) {
+			if (dist > DIST_THRESHOLD) {
+				addMove(MOVE_MODE_RIGHT, ROTATE_TICKS, 5);
+				addMove(MOVE_MODE_BACKWARD, ROTATE_TICKS * 2 * DISTANCE_M, 5);
+				Serial.println("Fata dreapta; il vad in fata;");
+			}
+			else {
+				addMove(MOVE_MODE_BACKWARD, ROTATE_TICKS * 2, 5);
+				addMove(MOVE_MODE_LEFT, ROTATE_TICKS, 5);
+				Serial.println("Fata dreapta;");
+			}
+		}
+		else if (S_BL < COLOR_THRESHOLD_BACK) {
+			if (dist > DIST_THRESHOLD) {
+				addMove(MOVE_MODE_LEFT, ROTATE_TICKS, 5);
+				addMove(MOVE_MODE_FORWARD, ROTATE_TICKS * 2 * DISTANCE_M, 5);
+				Serial.println("Spate stanga; il vad in fata;");
+			}
+			else {
+				addMove(MOVE_MODE_RIGHT, ROTATE_TICKS, 5);
+				addMove(MOVE_MODE_FORWARD, ROTATE_TICKS * 2 * DISTANCE_M, 5);
+				Serial.println("Spate stanga;");
+			}
+		}
+		else if (S_BR < COLOR_THRESHOLD_BACK) {
+			if (dist > DIST_THRESHOLD) {
+				addMove(MOVE_MODE_RIGHT, ROTATE_TICKS, 5);
+				addMove(MOVE_MODE_FORWARD, ROTATE_TICKS * 2 * DISTANCE_M, 5);
+				Serial.println("Spate dreapta; il vad in fata;");
+			}
+			else {
+				addMove(MOVE_MODE_LEFT, ROTATE_TICKS, 5);
+				addMove(MOVE_MODE_FORWARD,	ROTATE_TICKS * 2 * DISTANCE_M, 5);
+				Serial.println("Spate dreapta;");
+			}
+		}
+	}
 
-  if (moves > 0) {
-    if (getCurPriority() < 10) {
-      defaultModeTicks = 0;
-    }
-    m[moves - 1].ticks--;
+	// Move!
+	if (moves > 0) {
+		if (getCurPriority() < 10) {
+			ticksNoMoves = 0;
+		}
+		m[moves - 1].ticks--;
 
-    // Cum ne miscam astazi?
-    switch(m[moves - 1].mode) {
-      case MOVE_MODE_FIND: 
-        if (!isFound) {          
-          go(-NORMAL_SPEED, NORMAL_SPEED);
-        }
-        else {
-          addMove(MOVE_MODE_FATA, ROTATE_TICKS * 16, 10);                  
-        }
-        break;
-        
-      case MOVE_MODE_FATA:
-        go(NORMAL_SPEED, NORMAL_SPEED);
-        break;
-  
-      case MOVE_MODE_STANGA:
-        go(-NORMAL_SPEED, NORMAL_SPEED);
-        break;
-  
-      case MOVE_MODE_DREAPTA:
-        go(NORMAL_SPEED, -NORMAL_SPEED);
-        break;
-  
-      case MOVE_MODE_SPATE:
-        go(-NORMAL_SPEED, -NORMAL_SPEED);
-        break;
-  
-      case MOVE_MODE_STOP:
-        go(0, 0);
-        break;
-  
-      case MOVE_MODE_SPATE_STANGA:
-        go(-NORMAL_SPEED, 150);
-        break;
-  
-      case MOVE_MODE_SPATE_DREAPTA:
-        go(150, -NORMAL_SPEED);
-        break;
-    } 
+		switch(m[moves - 1].mode) {
+			case MOVE_MODE_SEEK_AND_DESTROY: 
+				if (!objectDetected) {					
+					go(-NORMAL_SPEED, NORMAL_SPEED);
+				}
+				else {
+					addMove(MOVE_MODE_FORWARD, ROTATE_TICKS * 16, 10);									
+				}
+				break;
+				
+			case MOVE_MODE_FORWARD:
+				go(NORMAL_SPEED, NORMAL_SPEED);
+				break;
+	
+			case MOVE_MODE_LEFT:
+				go(-NORMAL_SPEED, NORMAL_SPEED);
+				break;
+	
+			case MOVE_MODE_RIGHT:
+				go(NORMAL_SPEED, -NORMAL_SPEED);
+				break;
+	
+			case MOVE_MODE_BACKWARD:
+				go(-NORMAL_SPEED, -NORMAL_SPEED);
+				break;
+	
+			case MOVE_MODE_STOP:
+				go(0, 0);
+				break;
+		} 
 
-    // Termina move-ul
-    if (moves > 0 && m[moves - 1].ticks == 0) {
-      Serial.println("Am terminat un move.");
-      moves--;
-    }
-  }
-  else {    
-    // Increase ticks for default mode.
-    defaultModeTicks++;
+		// End the move, if the ticks reached zero.
+		if (
+			moves > 0 &&
+			m[moves - 1].ticks == 0
+		) {
+			Serial.println("Am terminat un move.");
+			moves--;
+		}
+	}
+	else {
+		ticksNoMoves++;
 
-    // Too many default ticks? Suntem lipiti de el.
-    /*if (defaultModeTicks > 6000) {         
-      addMove(MOVE_MODE_STOP, ROTATE_TICKS * 2, 7);
-      addMove(MOVE_MODE_FATA, ROTATE_TICKS * 2, 7);
-      addMove(MOVE_MODE_STOP, ROTATE_TICKS * 2, 7);
-      addMove(MOVE_MODE_FATA, ROTATE_TICKS * 2, 7);
-      addMove(MOVE_MODE_STOP, ROTATE_TICKS * 2, 7);
-      addMove(MOVE_MODE_FATA, ROTATE_TICKS * 2, 7);
-      addMove(MOVE_MODE_STOP, ROTATE_TICKS * 2, 7);
-      addMove(MOVE_MODE_FATA, ROTATE_TICKS * 2, 7);
-    }*/
+		// Too many ticks without a move? We might be head on with the enemy. Try moving back and forth a bit.
+		/*
+		if (ticksNoMoves > 6000) {				 
+			addMove(MOVE_MODE_STOP, ROTATE_TICKS * 2, 7);
+			addMove(MOVE_MODE_FORWARD, ROTATE_TICKS * 2, 7);
+			addMove(MOVE_MODE_STOP, ROTATE_TICKS * 2, 7);
+			addMove(MOVE_MODE_FORWARD, ROTATE_TICKS * 2, 7);
+			addMove(MOVE_MODE_STOP, ROTATE_TICKS * 2, 7);
+			addMove(MOVE_MODE_FORWARD, ROTATE_TICKS * 2, 7);
+			addMove(MOVE_MODE_STOP, ROTATE_TICKS * 2, 7);
+			addMove(MOVE_MODE_FORWARD, ROTATE_TICKS * 2, 7);
+		}
+		*/
 
-    // Default move -> attack!
-    go(NORMAL_SPEED, NORMAL_SPEED); 
+		// Default move: go forth!
+		go(NORMAL_SPEED, NORMAL_SPEED); 
 
-    // Random rotation
-    int r = random(0, 8000);
-    if (r == 0) {
-      addMove(MOVE_MODE_STANGA  , ROTATE_TICKS * 4, 12);
-      Serial.println("Random stanga.");
-    } 
-    else if (r == 1) {
-      addMove(MOVE_MODE_DREAPTA , ROTATE_TICKS * 4, 12);
-      Serial.println("Random dreapta.");
-    }
-    else if (ticksUntilWeCanFindAgain == 0) {
-      // Seek and destroy.  
-      addMove(MOVE_MODE_FIND, ROTATE_TICKS * 16, 11); 
-      ticksUntilWeCanFindAgain = 7000;
-    }
-  }  
+		// Maybe do a random rotation?
+		int r = random(0, 8000);
+		if (r == 0) {
+			addMove(MOVE_MODE_LEFT, ROTATE_TICKS * 4, 12);
+			Serial.println("Random stanga.");
+		} 
+		else if (r == 1) {
+			addMove(MOVE_MODE_RIGHT, ROTATE_TICKS * 4, 12);
+			Serial.println("Random dreapta.");
+		}
+		else if (ticksSeekAndDestroyCooldown == 0) {
+			// Or even better: seek and destroy. 
+			addMove(MOVE_MODE_SEEK_AND_DESTROY, ROTATE_TICKS * 16, 11); 
+			ticksSeekAndDestroyCooldown = 7000;
+		}
+	}	
 }
 
+// Standard method for movement.
 void go(int speedLeft, int speedRight) {
-  if (speedLeft > 0) {
-    analogWrite(MOTOR1_PIN1, speedLeft);
-    analogWrite(MOTOR1_PIN2, 0);
-  }
-  else {
-    analogWrite(MOTOR1_PIN1, 0);
-    analogWrite(MOTOR1_PIN2, -speedLeft);
-  }
+	if (speedLeft > 0) {
+		analogWrite(MOTOR1_PIN1, speedLeft);
+		analogWrite(MOTOR1_PIN2, 0);
+	}
+	else {
+		analogWrite(MOTOR1_PIN1, 0);
+		analogWrite(MOTOR1_PIN2, -speedLeft);
+	}
 
-  if (speedRight > 0) {
-    analogWrite(MOTOR2_PIN1, speedRight);
-    analogWrite(MOTOR2_PIN2, 0);
-  }
-  else {
-    analogWrite(MOTOR2_PIN1, 0);
-    analogWrite(MOTOR2_PIN2, -speedRight);
-  }
+	if (speedRight > 0) {
+		analogWrite(MOTOR2_PIN1, speedRight);
+		analogWrite(MOTOR2_PIN2, 0);
+	}
+	else {
+		analogWrite(MOTOR2_PIN1, 0);
+		analogWrite(MOTOR2_PIN2, -speedRight);
+	}
 }
-
