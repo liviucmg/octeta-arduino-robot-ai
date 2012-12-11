@@ -247,9 +247,17 @@ void loop()
   }
   else {
     // Default move -> attack!
-    go(255, 240);     
-    if (random(0, 1000) == 0) {
+    go(255, 240); 
+    int r = random(0, 2000);
+    if (r == 0) {
+      Serial.println("Random stanga.");
       m[0].mode = MOVE_MODE_STANGA;
+      m[0].ticks = ROTATE_TICKS;
+      moves++;
+    } 
+    else if (r == 1) {
+      Serial.println("Random dreapta.");
+      m[0].mode = MOVE_MODE_DREAPTA;
       m[0].ticks = ROTATE_TICKS;
       moves++;
     }
