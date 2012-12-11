@@ -27,7 +27,7 @@ int
   moves = 0,
   colorThresholdFata = 600,
   colorThresholdSpate = 750,
-  distThreshold = 250,
+  distThreshold = 350,
   ignoreWhiteTicks = 0;
 
 const int
@@ -37,7 +37,7 @@ const int
   MOVE_MODE_SPATE = 3;
   
 const int
-  ROTATE_TICKS = 100,
+  ROTATE_TICKS = 200,
   IGNORE_WHITE_TICKS = 100;
 
 void loop()
@@ -57,12 +57,13 @@ void loop()
   Serial.print(S_SD);
   Serial.println("");
   */
-  if (moves == 0)  {    
+  if (true || moves == 0)  {    
 //  if (ignoreWhiteTicks == 0) {
     if (
       S_SS < colorThresholdSpate &&
       S_SD < colorThresholdSpate
     ) {
+        Serial.println("Spate doua;");        
         moves = 0;
         m[moves].mode = MOVE_MODE_DREAPTA;
         m[moves].ticks = ROTATE_TICKS * 4;
@@ -76,6 +77,7 @@ void loop()
       S_FS < colorThresholdFata &&
       S_FD < colorThresholdFata
     ) {
+        Serial.println("Fata doua;");        
         moves = 0;
         m[moves].mode = MOVE_MODE_DREAPTA;
         m[moves].ticks = ROTATE_TICKS * 4;
@@ -89,6 +91,7 @@ void loop()
       S_FS < colorThresholdFata &&
       S_SS < colorThresholdSpate
     ) {
+        Serial.println("Stanga doua;");        
         moves = 0;
         m[moves].mode = MOVE_MODE_DREAPTA;
         m[moves].ticks = ROTATE_TICKS;
@@ -102,6 +105,7 @@ void loop()
       S_FD < colorThresholdFata &&
       S_SD < colorThresholdSpate
     ) {
+        Serial.println("Dreapta doua;");        
         moves = 0;
         m[moves].mode = MOVE_MODE_STANGA;
         m[moves].ticks = ROTATE_TICKS;
@@ -166,7 +170,7 @@ void loop()
         m[moves].mode = MOVE_MODE_STANGA;
         m[moves].ticks = ROTATE_TICKS;
         moves++;
-        m[moves].mode = MOVE_MODE_SPATE;
+        m[moves].mode = MOVE_MODE_FATA;
         m[moves].ticks = ROTATE_TICKS * 2;
         moves++;
         ignoreWhiteTicks = IGNORE_WHITE_TICKS;
@@ -190,7 +194,7 @@ void loop()
         m[moves].mode = MOVE_MODE_DREAPTA;
         m[moves].ticks = ROTATE_TICKS;
         moves++;
-        m[moves].mode = MOVE_MODE_SPATE;
+        m[moves].mode = MOVE_MODE_FATA;
         m[moves].ticks = ROTATE_TICKS * 2;
         moves++;
         ignoreWhiteTicks = IGNORE_WHITE_TICKS;
