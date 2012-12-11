@@ -24,13 +24,15 @@ void setup()
 }
 
 movement m[10];
+
 int
   moves = 0,
   colorThresholdFata = 600,
   colorThresholdSpate = 750,
-  distThreshold = 350,
+  distThreshold = 300,
   ignoreWhiteTicks = 0,
-  defaultModeTicks = 0;
+  defaultModeTicks = 0,
+  NORMAL_SPEED = 245;
 
 const int
   MOVE_MODE_FATA = 0,
@@ -41,6 +43,9 @@ const int
   MOVE_MODE_SPATE_STANGA = 5,
   MOVE_MODE_SPATE_DREAPTA = 6;
   
+const int DIST_NR = 10;
+int lastDist[DIST_NR], lastDistCount = 0;
+
 const int
   ROTATE_TICKS = 200,
   DISTANCE_M = 2;
@@ -55,12 +60,12 @@ int getCurPriority() {
 void addMove(int mode, int ticks, int priority) {
   // Mutari cu prioritate mai mica? Screw them.
   while (
-    moves > 0 &&
+  moves > 0 &&
     m[moves - 1].priority > priority
-  ) {
+    ) {
     moves--;
   }
-  
+
   // Adauga miscare
   m[moves].mode = mode;
   m[moves].ticks = ticks;
@@ -74,43 +79,69 @@ void loop()
   int S_FD = analogRead(1); // fata dreapta // culoare dreapta
   int S_SS = analogRead(3); // spate stanga // lat dr
   int S_SD = analogRead(2); // spate dreapta // lat stg
-  int dist = analogRead(4); // distanta
+  int curDist = analogRead(4); // distanta
   
+  // Shift mean values.
+  int dist = 0;
+  for (int i = DIST_NR - 1; i > 0; i--) {
+    lastDist[i] = lastDist[i - 1];
+    dist += lastDist[i];
+  }
+  lastDist[0] = curDist;
+  dist += lastDist[0];
+  dist /= DIST_NR;
+  
+  // We didn't yet get DIST_NR distances? 
+  if (lastDistCount < DIST_NR) {
+    lastDistCount++;
+    dist = curDist;
+  }
+  
+  /*
+  if (dist > distThreshold) {
+    Serial.println("Vad!");
+  }
+  else {    
+    Serial.println("Nu vad nimic.");
+  } 
+  return;
+  */
+
   if (getCurPriority() > 2) {
     if (
-      S_SS < colorThresholdSpate &&
+    S_SS < colorThresholdSpate &&
       S_SD < colorThresholdSpate
-    ) {
+      ) {
       addMove(MOVE_MODE_FATA    , ROTATE_TICKS * 4 * DISTANCE_M, 2);
       addMove(MOVE_MODE_DREAPTA , ROTATE_TICKS * 2, 2);
       Serial.println("Spate doua;");
     }   
     else if (
-      S_FS < colorThresholdFata &&
+    S_FS < colorThresholdFata &&
       S_FD < colorThresholdFata
-    ) {
+      ) {
       addMove(MOVE_MODE_SPATE , ROTATE_TICKS * 4 * DISTANCE_M,  2);
       addMove(MOVE_MODE_STANGA , ROTATE_TICKS * 2, 2);
       Serial.println("Fata doua;");    
     }
     else if (
-      S_FS < colorThresholdFata &&
+    S_FS < colorThresholdFata &&
       S_SS < colorThresholdSpate
-    ) {
+      ) {
       addMove(MOVE_MODE_DREAPTA , ROTATE_TICKS    , 2);
       addMove(MOVE_MODE_FATA    , ROTATE_TICKS * 4 * DISTANCE_M, 2);
       Serial.println("Stanga doua;"); 
     }
     else if (
-      S_FD < colorThresholdFata &&
+    S_FD < colorThresholdFata &&
       S_SD < colorThresholdSpate
-    ) {
+      ) {
       addMove(MOVE_MODE_STANGA  , ROTATE_TICKS    , 2);
       addMove(MOVE_MODE_FATA    , ROTATE_TICKS * 4 * DISTANCE_M, 2);
       Serial.println("Dreapta doua;"); 
     }
   }
-  
+
   if (getCurPriority() > 5) {
     if (S_FS < colorThresholdFata) { // E alb
       if (dist > distThreshold) { // Are ceva in fata
@@ -161,44 +192,44 @@ void loop()
       }
     }
   }
-  
+
   if (moves > 0) {
     if (getCurPriority() < 10) {
       defaultModeTicks = 0;
     }
     m[moves - 1].ticks--;
-         
+
     // Cum ne miscam astazi?
     switch(m[moves - 1].mode) {
-      case MOVE_MODE_FATA:
-        go(255, 240);
-        break;
-        
-      case MOVE_MODE_STANGA:
-        go(-255, 255);
-        break;
-        
-      case MOVE_MODE_DREAPTA:
-        go(255, -255);
-        break;
-        
-      case MOVE_MODE_SPATE:
-        go(-255, -255);
-        break;
-        
-      case MOVE_MODE_STOP:
-        go(0, 0);
-        break;
-        
-      case MOVE_MODE_SPATE_STANGA:
-        go(-255, 150);
-        break;
-        
-      case MOVE_MODE_SPATE_DREAPTA:
-        go(150, -255);
-        break;
+    case MOVE_MODE_FATA:
+      go(NORMAL_SPEED, NORMAL_SPEED);
+      break;
+
+    case MOVE_MODE_STANGA:
+      go(-NORMAL_SPEED, NORMAL_SPEED);
+      break;
+
+    case MOVE_MODE_DREAPTA:
+      go(NORMAL_SPEED, -NORMAL_SPEED);
+      break;
+
+    case MOVE_MODE_SPATE:
+      go(-NORMAL_SPEED, -NORMAL_SPEED);
+      break;
+
+    case MOVE_MODE_STOP:
+      go(0, 0);
+      break;
+
+    case MOVE_MODE_SPATE_STANGA:
+      go(-NORMAL_SPEED, 150);
+      break;
+
+    case MOVE_MODE_SPATE_DREAPTA:
+      go(150, -NORMAL_SPEED);
+      break;
     } 
-    
+
     // Termina move-ul
     if (m[moves - 1].ticks == 0) {
       Serial.println("Am terminat un move.");
@@ -208,7 +239,7 @@ void loop()
   else {    
     // Increase ticks for default mode.
     defaultModeTicks++;
-    
+
     // Too many default ticks? Suntem lipiti de el.
     if (defaultModeTicks > 6000) {
       int r = random(0, 2);
@@ -231,10 +262,10 @@ void loop()
         addMove(MOVE_MODE_FATA, ROTATE_TICKS * 8, 7);
       }      
     }
-    
+
     // Default move -> attack!
-    go(255, 255); 
-    
+    go(NORMAL_SPEED, NORMAL_SPEED); 
+
     // Random rotation
     int r = random(0, 8000);
     if (r == 0) {
@@ -257,7 +288,7 @@ void go(int speedLeft, int speedRight) {
     analogWrite(MOTOR1_PIN1, 0);
     analogWrite(MOTOR1_PIN2, -speedLeft);
   }
-  
+
   if (speedRight > 0) {
     analogWrite(MOTOR2_PIN1, speedRight);
     analogWrite(MOTOR2_PIN2, 0);
@@ -267,3 +298,4 @@ void go(int speedLeft, int speedRight) {
     analogWrite(MOTOR2_PIN2, -speedRight);
   }
 }
+
