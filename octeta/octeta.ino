@@ -32,7 +32,8 @@ int
   distThreshold = 300,
   ignoreWhiteTicks = 0,
   defaultModeTicks = 0,
-  NORMAL_SPEED = 245;
+  NORMAL_SPEED = 255,
+  ticksUntilWeCanFindAgain = 0;
 
 const int
   MOVE_MODE_FATA = 0,
@@ -41,14 +42,15 @@ const int
   MOVE_MODE_SPATE = 3,
   MOVE_MODE_STOP = 4,
   MOVE_MODE_SPATE_STANGA = 5,
-  MOVE_MODE_SPATE_DREAPTA = 6;
-  
+  MOVE_MODE_SPATE_DREAPTA = 6,
+  MOVE_MODE_FIND = 7;
+   
 const int DIST_NR = 10;
 int lastDist[DIST_NR], lastDistCount = 0;
 
 const int
   ROTATE_TICKS = 200,
-  DISTANCE_M = 2;
+  DISTANCE_M = 1;
 
 int getCurPriority() {
   if (moves == 0) {
@@ -97,6 +99,8 @@ void loop()
     dist = curDist;
   }
   
+  bool isFound = dist > distThreshold;
+  
   /*
   if (dist > distThreshold) {
     Serial.println("Vad!");
@@ -104,8 +108,11 @@ void loop()
   else {    
     Serial.println("Nu vad nimic.");
   } 
-  return;
-  */
+  return;*/  
+  
+  if (ticksUntilWeCanFindAgain > 0) {
+    ticksUntilWeCanFindAgain--;
+  }
 
   if (getCurPriority() > 2) {
     if (
@@ -147,7 +154,7 @@ void loop()
       if (dist > distThreshold) { // Are ceva in fata
         addMove(MOVE_MODE_STANGA  , ROTATE_TICKS    , 5);
         addMove(MOVE_MODE_SPATE   , ROTATE_TICKS * 2 * DISTANCE_M, 5);
-        Serial.println("Fata stanga; il vad in fata;");
+        Serial.println("Fata stanga; il vad in fata;");  
       }
       else {
         addMove(MOVE_MODE_SPATE  , ROTATE_TICKS * 2 * DISTANCE_M   , 5);
@@ -201,37 +208,46 @@ void loop()
 
     // Cum ne miscam astazi?
     switch(m[moves - 1].mode) {
-    case MOVE_MODE_FATA:
-      go(NORMAL_SPEED, NORMAL_SPEED);
-      break;
-
-    case MOVE_MODE_STANGA:
-      go(-NORMAL_SPEED, NORMAL_SPEED);
-      break;
-
-    case MOVE_MODE_DREAPTA:
-      go(NORMAL_SPEED, -NORMAL_SPEED);
-      break;
-
-    case MOVE_MODE_SPATE:
-      go(-NORMAL_SPEED, -NORMAL_SPEED);
-      break;
-
-    case MOVE_MODE_STOP:
-      go(0, 0);
-      break;
-
-    case MOVE_MODE_SPATE_STANGA:
-      go(-NORMAL_SPEED, 150);
-      break;
-
-    case MOVE_MODE_SPATE_DREAPTA:
-      go(150, -NORMAL_SPEED);
-      break;
+      case MOVE_MODE_FIND: 
+        if (!isFound) {          
+          go(-NORMAL_SPEED, NORMAL_SPEED);
+        }
+        else {
+          addMove(MOVE_MODE_FATA, ROTATE_TICKS * 16, 10);                  
+        }
+        break;
+        
+      case MOVE_MODE_FATA:
+        go(NORMAL_SPEED, NORMAL_SPEED);
+        break;
+  
+      case MOVE_MODE_STANGA:
+        go(-NORMAL_SPEED, NORMAL_SPEED);
+        break;
+  
+      case MOVE_MODE_DREAPTA:
+        go(NORMAL_SPEED, -NORMAL_SPEED);
+        break;
+  
+      case MOVE_MODE_SPATE:
+        go(-NORMAL_SPEED, -NORMAL_SPEED);
+        break;
+  
+      case MOVE_MODE_STOP:
+        go(0, 0);
+        break;
+  
+      case MOVE_MODE_SPATE_STANGA:
+        go(-NORMAL_SPEED, 150);
+        break;
+  
+      case MOVE_MODE_SPATE_DREAPTA:
+        go(150, -NORMAL_SPEED);
+        break;
     } 
 
     // Termina move-ul
-    if (m[moves - 1].ticks == 0) {
+    if (moves > 0 && m[moves - 1].ticks == 0) {
       Serial.println("Am terminat un move.");
       moves--;
     }
@@ -241,27 +257,16 @@ void loop()
     defaultModeTicks++;
 
     // Too many default ticks? Suntem lipiti de el.
-    if (defaultModeTicks > 6000) {
-      int r = random(0, 2);
-      if (0 == 0) {          
-        addMove(MOVE_MODE_STOP, ROTATE_TICKS * 2, 7);
-        addMove(MOVE_MODE_FATA, ROTATE_TICKS * 2, 7);
-        addMove(MOVE_MODE_STOP, ROTATE_TICKS * 2, 7);
-        addMove(MOVE_MODE_FATA, ROTATE_TICKS * 2, 7);
-        addMove(MOVE_MODE_STOP, ROTATE_TICKS * 2, 7);
-        addMove(MOVE_MODE_FATA, ROTATE_TICKS * 2, 7);
-        addMove(MOVE_MODE_STOP, ROTATE_TICKS * 2, 7);
-        addMove(MOVE_MODE_FATA, ROTATE_TICKS * 2, 7);
-      } 
-      else if (r == 1) {     
-        addMove(MOVE_MODE_STANGA, ROTATE_TICKS * 8, 7);
-        addMove(MOVE_MODE_FATA, ROTATE_TICKS * 8, 7);
-      }      
-      else if (r == 2) {     
-        addMove(MOVE_MODE_DREAPTA, ROTATE_TICKS * 8, 7);
-        addMove(MOVE_MODE_FATA, ROTATE_TICKS * 8, 7);
-      }      
-    }
+    /*if (defaultModeTicks > 6000) {         
+      addMove(MOVE_MODE_STOP, ROTATE_TICKS * 2, 7);
+      addMove(MOVE_MODE_FATA, ROTATE_TICKS * 2, 7);
+      addMove(MOVE_MODE_STOP, ROTATE_TICKS * 2, 7);
+      addMove(MOVE_MODE_FATA, ROTATE_TICKS * 2, 7);
+      addMove(MOVE_MODE_STOP, ROTATE_TICKS * 2, 7);
+      addMove(MOVE_MODE_FATA, ROTATE_TICKS * 2, 7);
+      addMove(MOVE_MODE_STOP, ROTATE_TICKS * 2, 7);
+      addMove(MOVE_MODE_FATA, ROTATE_TICKS * 2, 7);
+    }*/
 
     // Default move -> attack!
     go(NORMAL_SPEED, NORMAL_SPEED); 
@@ -269,12 +274,17 @@ void loop()
     // Random rotation
     int r = random(0, 8000);
     if (r == 0) {
-      addMove(MOVE_MODE_STANGA  , ROTATE_TICKS * 4, 10);
+      addMove(MOVE_MODE_STANGA  , ROTATE_TICKS * 4, 12);
       Serial.println("Random stanga.");
     } 
     else if (r == 1) {
-      addMove(MOVE_MODE_DREAPTA , ROTATE_TICKS * 4, 10);
+      addMove(MOVE_MODE_DREAPTA , ROTATE_TICKS * 4, 12);
       Serial.println("Random dreapta.");
+    }
+    else if (ticksUntilWeCanFindAgain == 0) {
+      // Seek and destroy.  
+      addMove(MOVE_MODE_FIND, ROTATE_TICKS * 16, 11); 
+      ticksUntilWeCanFindAgain = 7000;
     }
   }  
 }
